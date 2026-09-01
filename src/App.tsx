@@ -91,10 +91,9 @@ function AppAuthenticated() {
     try {
       const data = await apiFetch<User[]>('/users');
       setUsers(data);
-    } catch (err: any) {
-      setError(
-        err.message || 'Failed to connect to the backend on localhost:3000'
-      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect to the backend on localhost:3000';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -102,7 +101,8 @@ function AppAuthenticated() {
 
   // Fetch initial users list
   useEffect(() => {
-    fetchUsers();
+    const load = async () => { await fetchUsers(); };
+    void load();
   }, []);
 
   // Socket connection lifecycle and event subscription

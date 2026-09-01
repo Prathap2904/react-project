@@ -10,23 +10,20 @@
  *   logout()      – clear sessionStorage, reset currentUser
  *
  * Session restoration:
- *   On mount, the context reads the token and cached user from sessionStorage.
- *   If both are present the session is restored immediately (no network call).
- *   If either is missing the user must log in.
+ *   Resolved synchronously via lazy useState initialisers so that the
+ *   component tree never renders with a stale 'loading' flicker caused
+ *   by a synchronous setState inside useEffect.
  *
  * Important field distinction:
  *   currentUser.role       = chatbot persona / job title (unchanged from existing app)
  *   currentUser.accessRole = application RBAC role      (new field, used for future guards)
+ *
+ * Fast-refresh compliance:
+ *   AuthContext object and useAuthContext hook live in authContextInstance.ts
+ *   so that this file only exports the AuthProvider component.
  */
 
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  type ReactNode,
-} from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
 
 import {
   apiFetch,
@@ -37,31 +34,8 @@ import {
   setStoredUser,
 } from '../api/apiClient';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type AccessRole = 'admin' | 'manager' | 'member';
-
-/** The authenticated user's safe profile. passwordHash is never stored client-side. */
-export interface CurrentUser {
-  id: string;
-  name: string;
-  email: string;
-  /** Application RBAC role. NOT the chatbot persona. */
-  accessRole: AccessRole;
-  /** Chatbot persona / job title. Unchanged from existing User entity. */
-  role: string;
-  status: string;
-  avatar: string;
-}
-
-export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
-
-interface AuthContextValue {
-  currentUser: CurrentUser | null;
-  authStatus: AuthStatus;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-}
+import { AuthContext } from './authContextInstance';
+import type { CurrentUser, AuthStatus } from './authTypes';
 
 // ─── Backend login response shape ─────────────────────────────────────────────
 
@@ -70,31 +44,31 @@ interface LoginResponse {
   user: CurrentUser;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+// ─── Lazy initialisers – run once at mount, never inside an effect ─────────────
 
-export const AuthContext = createContext<AuthContextValue | null>(null);
+function resolveInitialUser(): CurrentUser | null {
+  return getStoredUser<CurrentUser>();
+}
+
+function resolveInitialStatus(): AuthStatus {
+  const token = getStoredToken();
+  const user  = getStoredUser<CurrentUser>();
+
+  if (token && user) {
+    return 'authenticated';
+  }
+
+  // Clean up any partial state (token without user, or vice-versa).
+  clearStoredAuth();
+  return 'unauthenticated';
+}
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
-
-  // ── Session restoration on mount ────────────────────────────────────────────
-  useEffect(() => {
-    const token = getStoredToken();
-    const user  = getStoredUser<CurrentUser>();
-
-    if (token && user) {
-      // Both token and user data found – restore the session.
-      setCurrentUser(user);
-      setAuthStatus('authenticated');
-    } else {
-      // No valid session – show login.
-      clearStoredAuth(); // clean up any partial state
-      setAuthStatus('unauthenticated');
-    }
-  }, []);
+  // Lazy initialisers run synchronously on first render – no useEffect needed.
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(resolveInitialUser);
+  const [authStatus, setAuthStatus]   = useState<AuthStatus>(resolveInitialStatus);
 
   // ── Login ────────────────────────────────────────────────────────────────────
   const login = useCallback(async (email: string, password: string) => {
@@ -126,14 +100,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-// ─── Internal hook (used by useAuth.ts) ──────────────────────────────────────
-
-export function useAuthContext(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used within an <AuthProvider>.');
-  }
-  return ctx;
 }

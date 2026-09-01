@@ -5,7 +5,7 @@
  * Throws if used outside <AuthProvider> to catch wiring mistakes early.
  */
 
-import { useAuthContext } from '../context/AuthContext';
+import { useAuthContext } from '../context/authContextInstance';
 
 export const useAuth = useAuthContext;
 export default useAuth;
