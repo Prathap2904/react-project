@@ -11,12 +11,13 @@
  *     so sessionStorage is the least-risky practical approach for this dev stage.
  *   - A future step can upgrade to HttpOnly cookies by adding a backend
  *     /auth/cookie-login endpoint and switching to credentials: 'include'.
+ *     this is the updated version of the code with better error handling and typescript support
  */
 
 export const API_BASE = 'http://localhost:3000';
 
 export const TOKEN_KEY = 'auth_token';
-export const USER_KEY  = 'auth_user';
+export const USER_KEY = 'auth_user';
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
